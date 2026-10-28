@@ -1,5 +1,8 @@
-# 超过 1MB 的目录
+# 不提交的目录
 mlx_env/
+bge-large-zh-v1.5/
+bge-reranker-large/
+mlx_data/
 
 # 超过 1MB 的文件
 deploy/bonsai2-mac/models/*.gguf
@@ -15,10 +18,6 @@ model/models/Qwen--Qwen3.5-2B/snapshots/master/merges.txt
 my_first_model/model.safetensors
 my_first_model/tokenizer.json
 my_first_adapter/*.safetensors
-bge-reranker-large/models/BAAI--bge-reranker-large/snapshots/master/pytorch_model.bin
-bge-reranker-large/models/BAAI--bge-reranker-large/snapshots/master/tokenizer.json
-bge-reranker-large/models/BAAI--bge-reranker-large/snapshots/master/sentencepiece.bpe.model
-bge-large-zh-v1.5/models/BAAI--bge-large-zh-v1.5/snapshots/master/pytorch_model.bin
 
 # 本机绝对路径软链接，指向上面的模型目录
 model/Qwen
