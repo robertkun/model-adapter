@@ -1,0 +1,30 @@
+# 超过 1MB 的目录
+mlx_env/
+
+# 超过 1MB 的文件
+deploy/bonsai2-mac/models/*.gguf
+deploy/bonsai2-mac/models/*.partial
+ollama_model/model.safetensors
+ollama_model/tokenizer.json
+ollama_model/vocab.json
+ollama_model/merges.txt
+model/models/Qwen--Qwen3.5-2B/snapshots/master/model.safetensors-00001-of-00001.safetensors
+model/models/Qwen--Qwen3.5-2B/snapshots/master/tokenizer.json
+model/models/Qwen--Qwen3.5-2B/snapshots/master/vocab.json
+model/models/Qwen--Qwen3.5-2B/snapshots/master/merges.txt
+my_first_model/model.safetensors
+my_first_model/tokenizer.json
+my_first_adapter/*.safetensors
+bge-reranker-large/models/BAAI--bge-reranker-large/snapshots/master/pytorch_model.bin
+bge-reranker-large/models/BAAI--bge-reranker-large/snapshots/master/tokenizer.json
+bge-reranker-large/models/BAAI--bge-reranker-large/snapshots/master/sentencepiece.bpe.model
+bge-large-zh-v1.5/models/BAAI--bge-large-zh-v1.5/snapshots/master/pytorch_model.bin
+
+# 本机绝对路径软链接，指向上面的模型目录
+model/Qwen
+
+# 缓存与系统文件
+__pycache__/
+*.py[cod]
+.DS_Store
+**/.lock/

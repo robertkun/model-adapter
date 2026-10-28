@@ -1,0 +1,5 @@
+models/*.gguf
+models/*.partial
+bench-result.txt
+server.log
+server.pid

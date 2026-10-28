@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>本地模型测试</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --card: #fffdf8;
+      --ink: #1d1a16;
+      --muted: #6f675c;
+      --line: #e3daca;
+      --accent: #0e6b52;
+      --accent-soft: #e5f4ee;
+      --bad: #9c3428;
+      --bad-soft: #fdeceb;
+      --warn: #8a5a12;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.5 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+    }
+    header {
+      background: #1d1a16;
+      color: #f6f1e7;
+      padding: 22px 28px 0;
+    }
+    header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 650; }
+    header p { margin: 0; color: #cfc6b8; font-size: 13px; }
+    nav { display: flex; gap: 8px; margin-top: 18px; }
+    nav button {
+      border: 0;
+      background: transparent;
+      color: #cfc6b8;
+      padding: 10px 16px;
+      border-radius: 10px 10px 0 0;
+      cursor: pointer;
+      font: inherit;
+    }
+    nav button.active { background: var(--bg); color: var(--ink); font-weight: 650; }
+    main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 48px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+    input, select, textarea, button { font: inherit; color: var(--ink); }
+    input, select, textarea {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px 10px;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    button.primary, button.ghost {
+      border-radius: 8px;
+      padding: 9px 14px;
+      cursor: pointer;
+    }
+    button.primary { border: 0; background: var(--accent); color: white; }
+    button.primary:disabled { opacity: 0.55; cursor: wait; }
+    button.ghost { border: 1px solid var(--line); background: #fff; }
+    button.link {
+      border: 0;
+      background: transparent;
+      color: var(--bad);
+      cursor: pointer;
+      padding: 0;
+    }
+    .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+    .run-line { align-items: center; flex-wrap: nowrap; gap: 8px 12px; overflow-x: auto; }
+    .model-chip { color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .model-chip strong { color: var(--ink); font-weight: 650; }
+    .inline-field { flex-direction: row; align-items: center; gap: 6px; white-space: nowrap; }
+    .inline-field input { width: 72px; }
+    .run-line .primary { flex: 0 0 auto; }
+    .error { color: var(--bad); margin: 8px 0 0; }
+    .cases { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    .cases th, .cases td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .cases th { color: var(--muted); font-weight: 550; font-size: 13px; }
+    .push-right { margin-left: auto; }
+    .filter-row { align-items: center; }
+    .filter-row .hint { margin: 0; }
+    .pager { margin-top: 12px; align-items: center; justify-content: flex-end; }
+    .pager button:disabled { opacity: 0.45; cursor: default; }
+    .clip { max-width: 360px; }
+    .conclusion p { margin: 0 0 8px; }
+    .conclusion p:last-child { margin-bottom: 0; }
+    .conclusion strong { font-weight: 680; }
+    .split { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .table-wrap { overflow: auto; }
+    table.results { width: 100%; border-collapse: collapse; min-width: 980px; }
+    table.results th, table.results td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.results th { position: sticky; top: 0; background: #faf7f1; font-size: 13px; font-weight: 650; }
+    table.results td.num, table.results th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    tr.bad td { background: var(--bad-soft); }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 12px;
+      background: #efeae1;
+    }
+    .tag.hit { background: var(--accent-soft); color: var(--accent); }
+    .tag.miss { background: var(--bad-soft); color: var(--bad); }
+    .tag.ok { background: var(--accent-soft); color: var(--accent); }
+    .tag.no { background: var(--bad-soft); color: var(--bad); }
+    #bulk { width: 100%; min-height: 140px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>本地模型测试</h1>
+    <p id="page-desc">先看 embedding，达到阈值后再做 rerank。期望 hit 且 embedding 通过的也会进入精排。</p>
+    <nav>
+      <button class="active" type="button" data-tab="BAAI">BAAI</button>
+      <button type="button" data-tab="QWEN">QWEN</button>
+      <button type="button" data-tab="BONSAI">BONSAI</button>
+    </nav>
+  </header>
+  <main>
+    <section class="card">
+      <h2 style="margin:0 0 12px; font-size:16px;">添加测试用例</h2>
+      <textarea id="bulk" placeholder='{"B-010", "今天北京的天气如何", "北京今天天气怎么样", "hit"},'></textarea>
+      <div class="row" style="margin-top:10px;">
+        <button id="parse-bulk" class="primary" type="button">解析并添加</button>
+        <label>导入文件
+          <input id="file" type="file" accept=".md,.txt,.go" />
+        </label>
+        <button id="clear" class="ghost push-right" type="button">清空用例</button>
+      </div>
+      <p class="hint" id="case-count">还没有用例。</p>
+      <div class="table-wrap">
+        <table class="cases" id="case-table" hidden>
+          <thead>
+            <tr><th>编号</th><th>句子 A</th><th>句子 B</th><th>标注</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="row pager" id="case-pager" hidden>
+        <button id="case-page-prev" class="ghost" type="button">上一页</button>
+        <span id="case-page-label"></span>
+        <button id="case-page-next" class="ghost" type="button">下一页</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 12px; font-size:16px;">开始测试</h2>
+      <div class="row run-line">
+        <span class="model-chip judge-only" hidden>判断 <strong id="judge-name">Ternary Bonsai 2 27B</strong></span>
+        <span class="model-chip pair-only">向量 <strong id="embed-name">BAAI/bge-large-zh-v1.5</strong></span>
+        <label class="inline-field pair-only">embedding 阈值
+          <input id="emb-threshold" type="number" step="0.01" value="0.92" />
+        </label>
+        <span class="model-chip pair-only">精排 <strong id="rerank-name">BAAI/bge-reranker-large</strong></span>
+        <label class="inline-field pair-only">rerank 阈值
+          <input id="rerank-threshold" type="number" step="0.1" value="7" />
+        </label>
+        <button id="run" class="primary push-right" type="button">开始测试</button>
+      </div>
+      <p class="hint" id="status">embedding ≥ 阈值记为召回。召回的用例全部做 rerank，包括期望 hit。两道都通过才预测 hit。</p>
+      <p class="error" id="error" hidden></p>
+    </section>
+
+    <section class="card conclusion" id="conclusion" hidden>
+      <h2 style="margin:0 0 12px; font-size:16px;">结论</h2>
+      <div id="conclusion-body"></div>
+    </section>
+
+    <section class="card" id="result-card" hidden>
+      <div class="row filter-row">
+        <p class="hint" id="filter-count"></p>
+        <label class="inline-field push-right">是否一致
+          <select id="consistency-filter">
+            <option value="all">全部</option>
+            <option value="yes">一致</option>
+            <option value="no">不一致</option>
+          </select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table class="results">
+          <thead>
+            <tr>
+              <th>编号</th>
+              <th>句子A</th>
+              <th>句子B</th>
+              <th>标注</th>
+              <th class="num">embedding</th>
+              <th>预测</th>
+              <th class="num">rerank</th>
+              <th>预测</th>
+              <th>是否一致</th>
+            </tr>
+          </thead>
+          <tbody id="result-body"></tbody>
+        </table>
+      </div>
+      <div class="row pager" id="pager">
+        <button id="page-prev" class="ghost" type="button">上一页</button>
+        <span id="page-label"></span>
+        <button id="page-next" class="ghost" type="button">下一页</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    const TABS = {
+      BAAI: {
+        storage: "baai-tester-v1",
+        endpoint: "/eval",
+        embedName: "BAAI/bge-large-zh-v1.5",
+        rerankName: "BAAI/bge-reranker-large",
+        embDefault: "0.92",
+        embStep: "0.01",
+        rerankDefault: "7",
+        rerankStep: "0.1",
+        desc: "先看 embedding，达到阈值后再做 rerank。期望 hit 且 embedding 通过的也会进入精排。",
+        status: "embedding ≥ 阈值记为召回。召回的用例全部做 rerank，包括期望 hit。两道都通过才预测 hit。",
+      },
+      QWEN: {
+        storage: "qwen-tester-v1",
+        endpoint: "/eval/qwen",
+        health: "/health/qwen",
+        embedName: "Qwen/Qwen3-Embedding-8B",
+        rerankName: "Qwen/Qwen3-Reranker-8B",
+        embDefault: "0.6",
+        embStep: "0.01",
+        rerankDefault: "0.5",
+        rerankStep: "0.01",
+        desc: "先看 embedding，达到阈值后再做 rerank。期望 hit 且 embedding 通过的也会进入精排。",
+        status: "向量是余弦相似度。精排是「同义」的概率，范围 0 到 1。embedding 达到阈值的都进入精排。",
+      },
+      BONSAI: {
+        storage: "bonsai-tester-v1",
+        endpoint: "/eval/bonsai",
+        health: "/health/bonsai",
+        mode: "judge",
+        seedFrom: "baai-tester-v1",
+        judgeName: "Ternary Bonsai 2 27B",
+        desc: "用 Ternary Bonsai 2 27B 直接判断两句话是否同义，不计算 embedding 和 rerank。",
+        status: "用 Bonsai 判断两句话是不是同一个意思。同义为 hit，不同义为 miss，再和标注比较是否一致。",
+      },
+    };
+    let activeTab = "BAAI";
+    const tab = () => TABS[activeTab];
+    const pairPattern = /\{"(?<id>[^"]+)", "(?<a>(?:\\.|[^"\\])*)", "(?<b>(?:\\.|[^"\\])*)", "(?<label>hit|miss)"\}/g;
+    const PAGE_SIZE = 200;
+    const CASE_PAGE_SIZE = 10;
+    let cases = [];
+    let resultRows = [];
+    let resultSummary = null;
+    let resultPage = 0;
+    let casePage = 0;
+    const sessions = {};
+
+    function sessionOf(id) {
+      if (!sessions[id]) {
+        sessions[id] = { resultRows: [], resultPage: 0, summary: null, filter: "all", status: "" };
+      }
+      return sessions[id];
+    }
+
+    function captureSession() {
+      const current = sessionOf(activeTab);
+      current.resultRows = resultRows;
+      current.resultPage = resultPage;
+      current.summary = resultSummary;
+      current.filter = $("consistency-filter").value;
+      current.status = $("status").textContent;
+    }
+
+    function restoreSession() {
+      const current = sessionOf(activeTab);
+      resultRows = current.resultRows;
+      resultPage = current.resultPage;
+      resultSummary = current.summary;
+      $("consistency-filter").value = current.filter || "all";
+      if (resultSummary) {
+        renderConclusion(resultSummary);
+        renderResults();
+      } else {
+        $("conclusion").hidden = true;
+        $("result-card").hidden = true;
+      }
+      if (current.status) $("status").textContent = current.status;
+    }
+
+    const $ = (id) => document.getElementById(id);
+
+    function decodeText(value) {
+      return value.includes("\\") ? JSON.parse(`"${value}"`) : value;
+    }
+
+    function applyTab() {
+      document.querySelectorAll("nav button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.tab === activeTab);
+      });
+      const judging = tab().mode === "judge";
+      document.querySelectorAll(".pair-only").forEach((node) => {
+        node.hidden = judging;
+      });
+      document.querySelectorAll(".judge-only").forEach((node) => {
+        node.hidden = !judging;
+      });
+      if (!judging) {
+        $("embed-name").textContent = tab().embedName;
+        $("rerank-name").textContent = tab().rerankName;
+        $("emb-threshold").step = tab().embStep;
+        $("rerank-threshold").step = tab().rerankStep;
+      } else {
+        $("judge-name").textContent = tab().judgeName;
+      }
+      $("page-desc").textContent = tab().desc;
+      $("status").textContent = tab().status;
+      renderResultHead();
+    }
+
+    function load() {
+      const current = tab();
+      const raw = localStorage.getItem(current.storage);
+      try {
+        if (raw == null && current.seedFrom) {
+          const seed = JSON.parse(localStorage.getItem(current.seedFrom) || "{}");
+          cases = Array.isArray(seed.cases) ? seed.cases : [];
+          if (cases.length) save();
+        } else {
+          const saved = JSON.parse(raw || "{}");
+          cases = Array.isArray(saved.cases) ? saved.cases : [];
+          if (!current.mode) {
+            $("emb-threshold").value = saved.embeddingThreshold != null ? saved.embeddingThreshold : current.embDefault;
+            $("rerank-threshold").value = saved.rerankThreshold != null ? saved.rerankThreshold : current.rerankDefault;
+          }
+        }
+      } catch (_) {
+        cases = [];
+      }
+      if (!current.mode && raw == null) {
+        $("emb-threshold").value = current.embDefault;
+        $("rerank-threshold").value = current.rerankDefault;
+      }
+      renderCases();
+    }
+
+    function save() {
+      localStorage.setItem(tab().storage, JSON.stringify({
+        cases,
+        embeddingThreshold: $("emb-threshold").value,
+        rerankThreshold: $("rerank-threshold").value,
+      }));
+    }
+
+    async function refreshModelStatus() {
+      const id = activeTab;
+      if (!TABS[id].health) return;
+      try {
+        const response = await fetch(TABS[id].health);
+        const data = await response.json();
+        if (activeTab === id && !data.ready && data.message) {
+          $("status").textContent = data.message;
+        }
+      } catch (_) {}
+    }
+
+    function renderResultHead() {
+      const tr = document.querySelector("table.results thead tr");
+      const cols = tab().mode === "judge"
+        ? ["编号", "句子A", "句子B", "标注", "回答", "预测", "是否一致"]
+        : ["编号", "句子A", "句子B", "标注", ["embedding", "num"], "预测", ["rerank", "num"], "预测", "是否一致"];
+      tr.replaceChildren();
+      cols.forEach((col) => {
+        const th = document.createElement("th");
+        if (Array.isArray(col)) {
+          th.className = col[1];
+          th.textContent = col[0];
+        } else {
+          th.textContent = col;
+        }
+        tr.appendChild(th);
+      });
+    }
+
+    function switchTab(id) {
+      if (!TABS[id] || id === activeTab) return;
+      save();
+      captureSession();
+      activeTab = id;
+      casePage = 0;
+      $("bulk").value = "";
+      showError("");
+      applyTab();
+      load();
+      restoreSession();
+      refreshModelStatus();
+    }
+
+    function tag(text, kind) {
+      const span = document.createElement("span");
+      span.className = "tag" + (kind ? " " + kind : "");
+      span.textContent = text;
+      return span;
+    }
+
+    function renderCases() {
+      const table = $("case-table");
+      const body = table.querySelector("tbody");
+      body.replaceChildren();
+      const pages = Math.max(1, Math.ceil(cases.length / CASE_PAGE_SIZE));
+      if (casePage > pages - 1) casePage = pages - 1;
+      if (casePage < 0) casePage = 0;
+      const start = casePage * CASE_PAGE_SIZE;
+      const pageItems = cases.slice(start, start + CASE_PAGE_SIZE);
+      pageItems.forEach((item, offset) => {
+        const index = start + offset;
+        const tr = document.createElement("tr");
+        [item.id, item.a, item.b].forEach((text, i) => {
+          const td = document.createElement("td");
+          if (i > 0) td.className = "clip";
+          td.textContent = text;
+          tr.appendChild(td);
+        });
+        const label = document.createElement("td");
+        label.appendChild(tag(item.label, item.label));
+        tr.appendChild(label);
+        const action = document.createElement("td");
+        const button = document.createElement("button");
+        button.className = "link";
+        button.type = "button";
+        button.textContent = "删除";
+        button.addEventListener("click", () => {
+          cases.splice(index, 1);
+          save();
+          renderCases();
+        });
+        action.appendChild(button);
+        tr.appendChild(action);
+        body.appendChild(tr);
+      });
+      const hasCases = cases.length > 0;
+      table.hidden = !hasCases;
+      $("case-pager").hidden = !hasCases;
+      $("case-page-label").textContent = `第 ${casePage + 1} / ${pages} 页`;
+      $("case-page-prev").disabled = casePage <= 0;
+      $("case-page-next").disabled = casePage >= pages - 1;
+      $("case-count").textContent = hasCases
+        ? `第 ${start + 1}–${start + pageItems.length} 条，共 ${cases.length} 条，每页 ${CASE_PAGE_SIZE} 条。`
+        : "还没有用例。";
+    }
+
+    function parseBulk(text) {
+      const found = [];
+      for (const line of text.split(/\r?\n/)) {
+        if (line.trim().startsWith("//")) continue;
+        pairPattern.lastIndex = 0;
+        for (const match of line.matchAll(pairPattern)) {
+          found.push({
+            id: match.groups.id,
+            a: decodeText(match.groups.a),
+            b: decodeText(match.groups.b),
+            label: match.groups.label,
+          });
+        }
+      }
+      return found;
+    }
+
+    function ratio(part, total) {
+      if (!total) return `${part}/${total}`;
+      return `${part}/${total} = ${(100 * part / total).toFixed(1)}%`;
+    }
+
+    function showError(message) {
+      const node = $("error");
+      node.hidden = !message;
+      node.textContent = message || "";
+    }
+
+    function judgeSummary(rows) {
+      const expected = rows.filter((row) => row.label === "hit");
+      const misses = rows.filter((row) => row.label === "miss");
+      return {
+        mode: "judge",
+        total: rows.length,
+        expected_hit: expected.length,
+        predicted_hit: rows.filter((row) => row.pred === "hit").length,
+        consistent: rows.filter((row) => row.consistent).length,
+        hit_consistent: expected.filter((row) => row.consistent).length,
+        miss_consistent: misses.filter((row) => row.consistent).length,
+        unparsed: rows.filter((row) => !row.pred).length,
+      };
+    }
+
+    function renderConclusion(summary) {
+      const emb = $("emb-threshold").value.trim();
+      const rerank = $("rerank-threshold").value.trim();
+      const passedRate = summary.hit_recalled
+        ? `${(100 * summary.hit_rerank_passed / summary.hit_recalled).toFixed(1)}%`
+        : "—";
+      const lines = summary.mode === "judge"
+        ? [
+            `全部用例（${summary.total} 条，其中期望 hit ${summary.expected_hit} 条）`,
+            `模型判断 hit：${ratio(summary.predicted_hit, summary.total)}`,
+            `与标注一致：${ratio(summary.consistent, summary.total)}`,
+            `期望 hit 子集：一致 ${ratio(summary.hit_consistent, summary.expected_hit)}`,
+            `期望 miss 子集：一致 ${ratio(summary.miss_consistent, summary.total - summary.expected_hit)}`,
+          ]
+        : [
+        `全部用例（${summary.total} 条，其中期望 hit ${summary.expected_hit} 条）`,
+        `第一道 向量召回（embedding ≥ ${emb}）：召回 ${ratio(summary.recalled, summary.total)}；召回里期望 hit ${ratio(summary.recalled_hit, summary.recalled)}`,
+        `第二道 精排（≥ ${rerank}，分母＝召回的 ${summary.recalled} 条）：通过 ${ratio(summary.rerank_passed, summary.recalled)}；通过里期望 hit ${ratio(summary.rerank_passed_hit, summary.rerank_passed)}`,
+        `两道合计：${ratio(summary.rerank_passed, summary.total)}`,
+        `期望 hit 子集（${summary.expected_hit} 条）`,
+        `向量召回：${ratio(summary.hit_recalled, summary.expected_hit)}（排名 ≤ 5 口径 ${ratio(summary.hit_rank5, summary.expected_hit)}）`,
+        `精排：召回的 ${summary.hit_recalled} 条里通过 ${summary.hit_rerank_passed} 条 = ${passedRate}`,
+        `两道合计：${ratio(summary.hit_rerank_passed, summary.expected_hit)}`,
+      ];
+      if (summary.mode === "judge" && summary.unparsed) {
+        lines.push(`未能判断：${summary.unparsed} 条`);
+      }
+      const box = $("conclusion-body");
+      box.replaceChildren();
+      const splitAt = summary.mode === "judge" ? 3 : 4;
+      lines.forEach((line, index) => {
+        const p = document.createElement("p");
+        if (index === splitAt) p.className = "split";
+        const strong = document.createElement("strong");
+        strong.textContent = line;
+        p.appendChild(strong);
+        box.appendChild(p);
+      });
+      box.hidden = false;
+      $("conclusion").hidden = false;
+    }
+
+    function visibleRows() {
+      const filter = $("consistency-filter").value;
+      if (filter === "yes") return resultRows.filter((row) => row.consistent);
+      if (filter === "no") return resultRows.filter((row) => !row.consistent);
+      return resultRows;
+    }
+
+    function renderResults() {
+      const rows = visibleRows();
+      const body = $("result-body");
+      body.replaceChildren();
+      const yes = resultRows.filter((row) => row.consistent).length;
+      const no = resultRows.length - yes;
+      const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+      if (resultPage > pages - 1) resultPage = pages - 1;
+      if (resultPage < 0) resultPage = 0;
+      const start = resultPage * PAGE_SIZE;
+      const pageRows = rows.slice(start, start + PAGE_SIZE);
+      const end = start + pageRows.length;
+      $("filter-count").textContent = rows.length
+        ? `第 ${start + 1}–${end} 条，共 ${rows.length} 条，每页 ${PAGE_SIZE} 条。一致 ${yes} 条，不一致 ${no} 条。`
+        : `共 0 条。一致 ${yes} 条，不一致 ${no} 条。`;
+      $("page-label").textContent = `第 ${resultPage + 1} / ${pages} 页`;
+      $("page-prev").disabled = resultPage <= 0;
+      $("page-next").disabled = resultPage >= pages - 1;
+      if (!pageRows.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = tab().mode === "judge" ? 7 : 9;
+        td.textContent = "没有符合筛选的用例。";
+        tr.appendChild(td);
+        body.appendChild(tr);
+        $("result-card").hidden = false;
+        return;
+      }
+      pageRows.forEach((row) => {
+        const tr = document.createElement("tr");
+        if (!row.consistent) tr.className = "bad";
+        const cells = [
+          row.id,
+          row.a,
+          row.b,
+        ];
+        cells.forEach((text) => {
+          const td = document.createElement("td");
+          td.textContent = text;
+          tr.appendChild(td);
+        });
+        const label = document.createElement("td");
+        label.appendChild(tag(row.label, row.label));
+        tr.appendChild(label);
+
+        if (tab().mode === "judge") {
+          const answer = document.createElement("td");
+          answer.textContent = row.answer || "—";
+          tr.appendChild(answer);
+          const pred = document.createElement("td");
+          if (row.pred) pred.appendChild(tag(row.pred, row.pred));
+          else pred.textContent = "—";
+          tr.appendChild(pred);
+          const same = document.createElement("td");
+          same.appendChild(tag(row.consistent ? "一致" : "不一致", row.consistent ? "ok" : "no"));
+          tr.appendChild(same);
+          body.appendChild(tr);
+          return;
+        }
+
+        const embedding = document.createElement("td");
+        embedding.className = "num";
+        embedding.textContent = Number(row.embedding).toFixed(4);
+        tr.appendChild(embedding);
+        const embPred = document.createElement("td");
+        embPred.appendChild(tag(row.embedding_pred, row.embedding_pred));
+        tr.appendChild(embPred);
+
+        const rerank = document.createElement("td");
+        rerank.className = "num";
+        rerank.textContent = row.entered_rerank ? Number(row.rerank).toFixed(4) : "—";
+        tr.appendChild(rerank);
+        const rerankPred = document.createElement("td");
+        if (row.entered_rerank) rerankPred.appendChild(tag(row.rerank_pred, row.rerank_pred));
+        else rerankPred.textContent = "—";
+        tr.appendChild(rerankPred);
+
+        const same = document.createElement("td");
+        same.appendChild(tag(row.consistent ? "一致" : "不一致", row.consistent ? "ok" : "no"));
+        tr.appendChild(same);
+        body.appendChild(tr);
+      });
+      $("result-card").hidden = false;
+    }
+
+    $("parse-bulk").addEventListener("click", () => {
+      const found = parseBulk($("bulk").value);
+      if (!found.length) {
+        showError("没有解析到用例。格式示例：{\"B-010\", \"句子A\", \"句子B\", \"hit\"}");
+        return;
+      }
+      found.forEach((item) => cases.push(item));
+      $("bulk").value = "";
+      save();
+      renderCases();
+      showError("");
+    });
+
+    $("file").addEventListener("change", async () => {
+      const file = $("file").files[0];
+      if (!file) return;
+      const found = parseBulk(await file.text());
+      if (!found.length) {
+        showError("文件里没有解析到用例");
+        return;
+      }
+      found.forEach((item) => cases.push(item));
+      save();
+      renderCases();
+      showError("");
+      $("file").value = "";
+    });
+
+    $("clear").addEventListener("click", () => {
+      cases = [];
+      casePage = 0;
+      save();
+      renderCases();
+      resultRows = [];
+      resultSummary = null;
+      resultPage = 0;
+      $("consistency-filter").value = "all";
+      $("conclusion").hidden = true;
+      $("result-card").hidden = true;
+      captureSession();
+    });
+
+    async function runJudge(runTab) {
+      const config = TABS[runTab];
+      const health = await fetch(config.health);
+      const info = await health.json();
+      if (!info.ready) throw new Error(info.message || "模型还没准备好");
+      const state = sessionOf(runTab);
+      const pending = cases.slice();
+      state.resultRows = [];
+      state.resultPage = 0;
+      state.summary = null;
+      state.filter = "all";
+      if (activeTab === runTab) {
+        resultRows = [];
+        resultSummary = null;
+        resultPage = 0;
+        $("consistency-filter").value = "all";
+      }
+      for (let i = 0; i < pending.length; i += 1) {
+        const item = pending[i];
+        const status = !info.running && i === 0
+          ? `正在加载模型，随后判断 ${pending.length} 条…`
+          : `正在判断 ${i + 1}/${pending.length}：${item.id || "未编号"}`;
+        state.status = status;
+        if (activeTab === runTab) $("status").textContent = status;
+        if (!String(item.a || "").trim() || !String(item.b || "").trim()) {
+          state.resultRows = state.resultRows.concat({
+            id: item.id,
+            a: item.a || "",
+            b: item.b || "",
+            label: item.label,
+            answer: "句子为空",
+            pred: "miss",
+            consistent: item.label === "miss",
+          });
+          state.summary = judgeSummary(state.resultRows);
+          state.status = `已判断 ${i + 1}/${pending.length}`;
+          if (activeTab === runTab) {
+            resultRows = state.resultRows;
+            resultSummary = state.summary;
+            renderConclusion(resultSummary);
+            renderResults();
+            $("status").textContent = state.status;
+          }
+          continue;
+        }
+        const response = await fetch(config.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cases: [item] }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : "判断失败");
+        state.resultRows = state.resultRows.concat(payload.rows[0]);
+        state.summary = judgeSummary(state.resultRows);
+        state.status = `已判断 ${i + 1}/${pending.length}`;
+        if (activeTab === runTab) {
+          resultRows = state.resultRows;
+          resultSummary = state.summary;
+          renderConclusion(resultSummary);
+          renderResults();
+          $("status").textContent = state.status;
+        }
+      }
+      state.status = `完成 ${state.resultRows.length} 条。`;
+      if (activeTab === runTab) {
+        $("status").textContent = state.status;
+        $("conclusion").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    $("run").addEventListener("click", async () => {
+      showError("");
+      if (!cases.length) {
+        showError("先添加测试用例");
+        return;
+      }
+      const judging = tab().mode === "judge";
+      const embeddingThreshold = Number($("emb-threshold").value);
+      const rerankThreshold = Number($("rerank-threshold").value);
+      if (!judging && (!Number.isFinite(embeddingThreshold) || !Number.isFinite(rerankThreshold))) {
+        showError("阈值必须是数字");
+        return;
+      }
+      save();
+      const runTab = activeTab;
+      $("run").disabled = true;
+      if (!judging) {
+        $("status").textContent = "正在计算 embedding 和 rerank…";
+        sessionOf(runTab).status = $("status").textContent;
+      }
+      try {
+        if (judging) {
+          await runJudge(runTab);
+          return;
+        }
+        const response = await fetch(TABS[runTab].endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cases,
+            embedding_threshold: embeddingThreshold,
+            rerank_threshold: rerankThreshold,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || "测试失败");
+        const done = `完成 ${payload.rows.length} 条。期望 hit 且 embedding 通过的已做 rerank。`;
+        const state = sessionOf(runTab);
+        state.resultRows = payload.rows;
+        state.resultPage = 0;
+        state.summary = payload.summary;
+        state.status = done;
+        if (activeTab === runTab) {
+          resultRows = payload.rows;
+          resultSummary = payload.summary;
+          resultPage = 0;
+          renderConclusion(payload.summary);
+          renderResults();
+          $("status").textContent = done;
+          $("conclusion").scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      } catch (error) {
+        const state = sessionOf(runTab);
+        state.status = judging ? "判断没有完成。" : "计算没有完成。";
+        if (activeTab === runTab) {
+          showError(error.message);
+          $("status").textContent = state.status;
+        }
+      } finally {
+        $("run").disabled = false;
+      }
+    });
+
+    $("consistency-filter").addEventListener("change", () => {
+      resultPage = 0;
+      if (resultRows.length) renderResults();
+    });
+
+    $("page-prev").addEventListener("click", () => {
+      if (resultPage <= 0) return;
+      resultPage -= 1;
+      renderResults();
+    });
+
+    $("page-next").addEventListener("click", () => {
+      const pages = Math.max(1, Math.ceil(visibleRows().length / PAGE_SIZE));
+      if (resultPage >= pages - 1) return;
+      resultPage += 1;
+      renderResults();
+    });
+
+    $("case-page-prev").addEventListener("click", () => {
+      if (casePage <= 0) return;
+      casePage -= 1;
+      renderCases();
+    });
+
+    $("case-page-next").addEventListener("click", () => {
+      const pages = Math.max(1, Math.ceil(cases.length / CASE_PAGE_SIZE));
+      if (casePage >= pages - 1) return;
+      casePage += 1;
+      renderCases();
+    });
+
+    document.querySelectorAll("nav button").forEach((button) => {
+      button.addEventListener("click", () => switchTab(button.dataset.tab));
+    });
+
+    applyTab();
+    load();
+    refreshModelStatus();
+  </script>
+</body>
+</html>

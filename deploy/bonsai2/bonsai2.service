@@ -1,0 +1,13 @@
+[Unit]
+Description=Ternary Bonsai 2 27B llama-server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/local/src/bonsai2
+ExecStart=/bin/bash /usr/local/src/bonsai2/start.sh --foreground
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

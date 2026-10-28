@@ -39,7 +39,7 @@ Xeon E5-2620 v4，2.10 GHz，Broadwell。2 路 × 8 核 × 2 线程，共 32 个
 
 Apple M4 Pro。14 个 CPU 核（10 性能核 + 4 能效核），20 个 GPU 核，24GB 统一内存，Metal。llama.cpp build 11669。
 
-实际参数：全部层放在 Metal 上（`-ngl 99`），10 线程，上下文 4096，Flash Attention 开着。24GB 不适合把上下文开到服务端那档 32768。
+测速时全部层放在 Metal 上（`-ngl 99`），10 线程，上下文 4096，Flash Attention 开着。接小龙虾时上下文改为 32768，因为工具提示本身大约 1.7 万 token，4096 装不下。
 
 语义判断另外关掉了思考，temperature 为 0，只让模型输出 `hit` 或 `miss`。句子 A 或句子 B 为空时不调用模型，直接记为 miss。
 
@@ -66,6 +66,80 @@ Apple M4 Pro。14 个 CPU 核（10 性能核 + 4 能效核），20 个 GPU 核�
 模型判出的 hit 条数和期望 hit 一样，都是 82 条，但不是同一批句子。真正同义的 82 条里判对 69 条，漏掉 13 条。不同义的 286 条里判对 273 条，误判成同义 13 条。所以 hit 的精确率和召回率都是 69/82 = 84.1%。它更不容易把不同义的句子说成同义。
 
 服务端没有跑这 368 条。
+
+## 4. 本机启动
+
+命令行对话用 `./deploy/bonsai2-mac/chat.sh`。小龙虾不走这个进程，它要一个 OpenAI 兼容的 HTTP 服务。本机 Homebrew 自带的 Node 是 23，小龙虾要求 Node 24.22.1+ 或 26.12.1+，所以 Node 26.12.1 装在 `~/.local/node-v26`，`openclaw` 命令在 `/opt/homebrew/bin/openclaw`。
+
+24GB 内存同时只跑一份权重。开服务之前先退出 `chat.sh`。
+
+### 启动模型服务
+
+在 `model-adapter` 目录执行：
+
+```bash
+llama-server \
+  -m deploy/bonsai2-mac/models/Ternary-Bonsai-2-27B-Q2_0-prism-fork-required.gguf \
+  --alias bonsai-2-27b \
+  --host 127.0.0.1 --port 8091 \
+  -ngl 99 -t 10 -c 32768 -np 1 -fa on \
+  --reasoning off \
+  --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0
+```
+
+看到 `listening on http://127.0.0.1:8091` 后再做下一步。模型名是 `bonsai-2-27b`。
+
+### 安装并配置小龙虾
+
+第一次没有 `openclaw` 命令时安装。已安装则跳过。
+
+```bash
+# Node 26.12.1 解压到 ~/.local/node-v26 之后
+export PATH="$HOME/.local/node-v26/bin:$PATH"
+npm install -g --prefix "$HOME/.local/node-v26" openclaw@latest --allow-scripts=openclaw
+```
+
+把本机模型写成默认模型。`apiKey` 填任意非空字符串，本机服务不校验。
+
+```bash
+openclaw onboard --non-interactive --accept-risk --skip-health \
+  --auth-choice custom-api-key \
+  --custom-base-url "http://127.0.0.1:8091/v1" \
+  --custom-api-key "local" \
+  --custom-provider-id local \
+  --custom-compatibility openai \
+  --custom-model-id "bonsai-2-27b"
+```
+
+配置写在 `~/.openclaw/openclaw.json`。这次实际用的值：
+
+- 默认模型：`local/bonsai-2-27b`
+- 地址：`http://127.0.0.1:8091/v1`
+- 接口：`openai-completions`
+- 上下文：32768
+- 单次最多生成：2048 token
+- 超时：300 秒
+- 思考：关闭
+
+地址必须带 `/v1`。上下文要和 `llama-server` 的 `-c 32768` 一致。
+
+### 打开小龙虾
+
+```bash
+openclaw gateway
+```
+
+另一个终端执行 `openclaw dashboard`，浏览器打开控制页后再发消息。小龙虾的工具提示大约 1.5 万 token，第一遍读入要两分钟左右，生成大约 18 token/秒。页面会一直显示「等待响应」，直到这一轮工具调用结束。
+
+本机没有生图模型。`image_generate` 只是工具名，画不出图片。
+
+### 停止
+
+在 `llama-server` 那个终端按 Ctrl+C。然后：
+
+```bash
+openclaw gateway stop --force
+```
 
 ## 结论
 
