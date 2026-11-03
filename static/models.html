@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>本机模型</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --card: #fffdf8;
+      --ink: #1d1a16;
+      --muted: #6f675c;
+      --line: #e3daca;
+      --accent: #0e6b52;
+      --accent-soft: #e5f4ee;
+      --bad: #9c3428;
+      --bad-soft: #fdeceb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.5 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+    }
+    header {
+      background: #1d1a16;
+      color: #f6f1e7;
+      padding: 22px 28px 18px;
+    }
+    header h1 { margin: 0 0 4px; font-size: 22px; font-weight: 650; }
+    header p { margin: 0; color: #cfc6b8; font-size: 13px; }
+    main { max-width: 980px; margin: 0 auto; padding: 22px 20px 48px; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    .section { margin-bottom: 22px; }
+    .meta { color: var(--muted); font-size: 13px; margin: -4px 0 12px; }
+    .grid { display: grid; gap: 12px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px 18px;
+    }
+    .head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .head h3 { margin: 0; font-size: 17px; font-weight: 650; }
+    .tag, .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 12px;
+    }
+    .tag { background: #efeae1; color: var(--muted); }
+    .pill.run { background: var(--accent-soft); color: var(--accent); }
+    .pill.stop { background: #efeae1; color: var(--muted); }
+    .endpoint {
+      margin: 10px 0 0;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 13px;
+    }
+    .detail { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    button {
+      font: inherit;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    button.primary { border: 0; background: var(--accent); color: white; }
+    button.ghost { border: 1px solid var(--line); background: #fff; color: var(--ink); }
+    button.danger { border: 1px solid #e7c6c2; background: var(--bad-soft); color: var(--bad); }
+    button:disabled { opacity: 0.55; cursor: wait; }
+    .error { color: var(--bad); margin: 8px 0 0; }
+    .empty { color: var(--muted); }
+    code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>本机模型</h1>
+    <p>只看本机端口和已经放在磁盘上的权重。页面本身不加载模型。</p>
+  </header>
+  <main>
+    <section class="section">
+      <h2>当前运行</h2>
+      <p class="meta" id="checked">正在读取…</p>
+      <div class="grid" id="running"></div>
+    </section>
+    <section class="section">
+      <h2>可以运行</h2>
+      <p class="meta">权重已经在本机，服务还没起来。</p>
+      <div class="grid" id="available"></div>
+    </section>
+    <p class="error" id="error" hidden></p>
+  </main>
+  <script>
+    const runningBox = document.getElementById("running");
+    const availableBox = document.getElementById("available");
+    const checked = document.getElementById("checked");
+    const errorBox = document.getElementById("error");
+    let busy = "";
+
+    function card(model) {
+      const article = document.createElement("article");
+      article.className = "card";
+      const head = document.createElement("div");
+      head.className = "head";
+      const title = document.createElement("h3");
+      title.textContent = model.name;
+      const task = document.createElement("span");
+      task.className = "tag";
+      task.textContent = model.task;
+      const pill = document.createElement("span");
+      pill.className = model.running ? "pill run" : "pill stop";
+      pill.textContent = model.running ? "运行中" : "未启动";
+      head.append(title, task, pill);
+      article.append(head);
+
+      if (model.endpoint) {
+        const endpoint = document.createElement("p");
+        endpoint.className = "endpoint";
+        endpoint.textContent = model.endpoint;
+        article.append(endpoint);
+      }
+      const detail = document.createElement("p");
+      detail.className = "detail";
+      const bits = [model.detail];
+      if (model.model_id) bits.push("模型名 " + model.model_id);
+      if (model.auth) bits.push("API Key " + model.auth);
+      if (model.block) bits.push(model.block);
+      detail.textContent = bits.filter(Boolean).join(" ");
+      article.append(detail);
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      if (model.can_stop) {
+        actions.append(button("停止", "danger", () => act(model.id, "stop")));
+      }
+      if (model.can_start) {
+        actions.append(button("启动", "primary", () => act(model.id, "start")));
+      }
+      if (model.endpoint) {
+        actions.append(button("复制地址", "ghost", () => navigator.clipboard.writeText(model.endpoint)));
+      }
+      if (actions.childElementCount) article.append(actions);
+      return article;
+    }
+
+    function button(label, kind, onClick) {
+      const node = document.createElement("button");
+      node.type = "button";
+      node.className = kind;
+      node.textContent = label;
+      node.disabled = Boolean(busy);
+      node.addEventListener("click", onClick);
+      return node;
+    }
+
+    function render(data) {
+      checked.textContent = "更新于 " + data.checked_at + ollamaLine(data.ollama);
+      fill(runningBox, data.running, "现在没有模型在对外提供接口。");
+      fill(availableBox, data.available, "能启动的模型都已经在跑。");
+    }
+
+    function ollamaLine(ollama) {
+      if (!ollama || !ollama.up) return "";
+      if (ollama.loaded && ollama.loaded.length) {
+        return "。Ollama 已载入 " + ollama.loaded.join("、");
+      }
+      return "。Ollama 在 11434，没有载入模型。";
+    }
+
+    function fill(box, models, emptyText) {
+      box.replaceChildren();
+      if (!models.length) {
+        const note = document.createElement("p");
+        note.className = "empty";
+        note.textContent = emptyText;
+        box.append(note);
+        return;
+      }
+      for (const model of models) box.append(card(model));
+    }
+
+    async function load() {
+      const response = await fetch("/api/models");
+      if (!response.ok) throw new Error("读取模型列表失败");
+      render(await response.json());
+    }
+
+    async function act(id, action) {
+      if (action === "stop" && !confirm("停止后这个接口会立刻不可用。")) return;
+      if (action === "start" && id === "qwen3-embedding-8b" && !confirm("这个向量大约 14GB，启动后会占很多内存。仍然启动？")) return;
+      busy = id;
+      errorBox.hidden = true;
+      try {
+        const response = await fetch("/api/models/" + id + "/" + action, { method: "POST" });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "操作失败");
+        busy = "";
+        render(body);
+      } catch (error) {
+        errorBox.hidden = false;
+        errorBox.textContent = error.message;
+        busy = "";
+        await load();
+      }
+    }
+
+    load().catch((error) => {
+      errorBox.hidden = false;
+      errorBox.textContent = error.message;
+    });
+    setInterval(() => {
+      if (!busy) load().catch(() => {});
+    }, 5000);
+  </script>
+</body>
+</html>

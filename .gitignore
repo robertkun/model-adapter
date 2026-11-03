@@ -12,6 +12,9 @@ self-cognition/
 # 超过 1MB 的文件
 deploy/bonsai2-mac/models/*.gguf
 deploy/bonsai2-mac/models/*.partial
+deploy/qwen3-asr/.venv/
+deploy/qwen3-asr/models/
+deploy/qwen-embed/.venv/
 
 # 缓存与系统文件
 __pycache__/
